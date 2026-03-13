@@ -1,0 +1,16 @@
+# 第一阶段：数据扫描 / 清洗 / SQLite 导入 / 报告输出
+pandas>=2.2,<3.0
+charset-normalizer>=3.3,<4.0
+PyYAML>=6.0,<7.0
+python-dateutil>=2.9,<3.0
+tabulate>=0.9,<1.0
+
+# 可选但建议：命令行参数与更清晰日志
+click>=8.1,<9.0
+rich>=14.0,<15.0
+
+# 第二阶段：简单查询 API
+fastapi>=0.116,<1.0
+uvicorn[standard]>=0.35,<1.0
+pydantic>=2.11,<3.0
+SQLAlchemy>=2.0,<3.0

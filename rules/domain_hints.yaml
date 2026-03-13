@@ -1,0 +1,18 @@
+# 用于辅助识别候选业务域的人工提示。
+# 这里只放“候选关键词”，不要把未确认业务逻辑写死。
+
+item:
+  table_keywords: [item, goods, equip, award]
+  field_keywords: [itemid, item_tid, itemname, reward_item]
+
+task:
+  table_keywords: [quest, mission, task]
+  field_keywords: [questid, missionid, condition, reward]
+
+gift:
+  table_keywords: [gift, package, bundle, mall]
+  field_keywords: [giftid, packageid, reward_tid]
+
+enhance:
+  table_keywords: [strengthen, reinforce, enhance, upgrade]
+  field_keywords: [level, cost_item, material_tid, result_tid]
