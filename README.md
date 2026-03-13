@@ -324,3 +324,30 @@ python scripts/query_item.py --keyword 测试物品
 - 必要时再接入截图/导出功能
 
 在第二阶段未稳定前，不建议大规模投入网页视觉层开发。
+
+
+## 15. 当前实现进度（第一阶段最小闭环）
+
+已实现并可脚本化重跑：
+
+- `scripts/init_project.py`：自动创建 `outputs/reports`、`outputs/intermediate`、`outputs/sqlite` 等目录。
+- `scripts/scan_tables.py`：扫描 `data/current`，输出 `tables_manifest.json`、`raw_schema.json`、`parse_failures.json`，并生成 `table_inventory.md` 与 `scan_failures.md`。
+- `scripts/import_to_sqlite.py`：导入到 `outputs/sqlite/game_tables.db`，保留原始字段名并记录 `table_metadata`。
+- `scripts/build_indexes.py`：生成 `table_index`、`field_index`、`value_sample_index`、`candidate_relationships`（全部标记为“待确认”）。
+- `scripts/detect_domains.py`：结合 `rules/domain_hints.yaml` 输出候选域报告与待确认清单。
+- `scripts/generate_reports.py`：生成 `outputs/reports/field_dictionary.md`。
+- `scripts/query_item.py`：支持按 `item_tid` 或关键词做最小查询并输出 Markdown 报告。
+- `scripts/validate_outputs.py`：校验第一阶段最小闭环产物齐全性。
+
+推荐执行顺序：
+
+```bash
+python scripts/init_project.py
+python scripts/scan_tables.py
+python scripts/import_to_sqlite.py
+python scripts/build_indexes.py
+python scripts/detect_domains.py
+python scripts/generate_reports.py
+python scripts/query_item.py ItemTable
+python scripts/validate_outputs.py
+```

@@ -11,18 +11,18 @@ REQUIRED_OUTPUTS = [
     "data/cache/tables_manifest.json",
     "data/cache/raw_schema.json",
     "data/cache/parse_failures.json",
-    "data/db/config_tables.sqlite",
-    "data/indexes/table_registry.json",
-    "data/indexes/field_registry.json",
-    "data/indexes/enum_profiles.json",
-    "data/indexes/relation_candidates.json",
-    "data/indexes/domain_candidates.json",
-    "docs/scan_summary.md",
-    "docs/candidate_tables.md",
-    "docs/candidate_relations.md",
-    "docs/field_dictionary_draft.md",
-    "docs/unknown_fields_todo.md",
-    "docs/item_query_minimum_path.md",
+    "outputs/sqlite/game_tables.db",
+    "outputs/intermediate/table_index.json",
+    "outputs/intermediate/field_index.json",
+    "outputs/intermediate/value_sample_index.json",
+    "outputs/intermediate/candidate_relationships.json",
+    "outputs/intermediate/domain_candidates.json",
+    "outputs/reports/table_inventory.md",
+    "outputs/reports/field_dictionary.md",
+    "outputs/reports/candidate_relationships.md",
+    "outputs/reports/domain_candidates_report.md",
+    "outputs/reports/unknown_fields_report.md",
+    "outputs/reports/scan_failures.md",
 ]
 
 
@@ -34,7 +34,7 @@ def main() -> None:
         for item in missing:
             console.print(f" - {item}")
         raise SystemExit(1)
-    console.print("[green]主要产物已齐全[/green]")
+    console.print("[green]第一阶段最小闭环产物已齐全[/green]")
 
 
 if __name__ == "__main__":
