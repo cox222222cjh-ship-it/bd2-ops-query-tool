@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -17,7 +18,7 @@ STRONG_ITEM_RELATION_FIELD_WHITELIST = {
     "completeitemtid",
     "useskilltid",
 }
-STRONG_ITEM_RELATION_PREFIX_WHITELIST = ("dropitem", "boxitem")
+STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN = re.compile(r"^(dropitem|boxitem)(\d+|id|tid)$")
 
 
 def normalize_name(value: str) -> str:
@@ -39,7 +40,7 @@ def is_strong_item_relation_field(field_name: str) -> bool:
     normalized = normalize_name(field_name)
     if normalized in STRONG_ITEM_RELATION_FIELD_WHITELIST:
         return True
-    return any(normalized.startswith(prefix) for prefix in STRONG_ITEM_RELATION_PREFIX_WHITELIST)
+    return bool(STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN.match(normalized))
 
 
 @click.command()
