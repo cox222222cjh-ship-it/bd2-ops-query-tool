@@ -19,6 +19,7 @@ STRONG_ITEM_RELATION_FIELD_WHITELIST = {
     "useskilltid",
 }
 STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN = re.compile(r"^(dropitem|boxitem)(\d+|id|tid)$")
+STRONG_INTERSECTION_SENTINEL_VALUES = {"", "0", "0.0", "-1", "none", "null"}
 
 
 def normalize_name(value: str) -> str:
@@ -161,7 +162,8 @@ def main(db_path: str, output_dir: str) -> None:
             if left["table"] == right["table"]:
                 continue
             inter = left["values"].intersection(right["values"])
-            if inter:
+            meaningful_inter = {v for v in inter if v.strip().lower() not in STRONG_INTERSECTION_SENTINEL_VALUES}
+            if meaningful_inter:
                 candidates.append(
                     {
                         "source_table": left["table"],
@@ -170,8 +172,8 @@ def main(db_path: str, output_dir: str) -> None:
                         "target_field": right["field"],
                         "inference": "exact_value_match",
                         "evidence_strength": "strong",
-                        "intersection_samples": sorted(inter)[:5],
-                        "match_count": len(inter),
+                        "intersection_samples": sorted(meaningful_inter)[:5],
+                        "match_count": len(meaningful_inter),
                         "confidence": 0.9,
                         "status": "待确认",
                     }
