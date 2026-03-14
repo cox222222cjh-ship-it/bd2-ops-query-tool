@@ -149,9 +149,10 @@ def main(keyword: str, db_path: str, output: str) -> None:
         bucket = category_items.get(category, [])
         if bucket:
             for rel in bucket[:50]:
+                rel_status = str(rel.get("status", "")).strip() or "待确认"
                 lines.append(
                     f"- `{rel['source_table']}.{rel['source_field']}` -> `{rel['target_table']}.{rel['target_field']}` "
-                    f"({rel['inference']}, confidence={rel['confidence']}, 状态=待确认)"
+                    f"({rel['inference']}, confidence={rel['confidence']}, 状态={rel_status})"
                 )
         else:
             lines.append("- 暂无候选（待确认）")
@@ -161,9 +162,10 @@ def main(keyword: str, db_path: str, output: str) -> None:
     uncategorized_bucket = category_items.get(UNCATEGORIZED_KEY, [])
     if uncategorized_bucket:
         for rel in uncategorized_bucket[:50]:
+            rel_status = str(rel.get("status", "")).strip() or "待确认"
             lines.append(
                 f"- `{rel['source_table']}.{rel['source_field']}` -> `{rel['target_table']}.{rel['target_field']}` "
-                f"({rel['inference']}, confidence={rel['confidence']}, 状态=待确认)"
+                f"({rel['inference']}, confidence={rel['confidence']}, 状态={rel_status})"
             )
     else:
         lines.append("- 暂无候选（待确认）")
