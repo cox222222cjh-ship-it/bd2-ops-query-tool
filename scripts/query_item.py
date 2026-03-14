@@ -1,12 +1,27 @@
 from __future__ import annotations
 
 import sqlite3
+import re
 from pathlib import Path
 from typing import Any
 
 import click
 
 from common import OUTPUTS_DIR, read_json
+
+
+def sanitize_keyword_for_filename(keyword: str) -> str:
+    sanitized = keyword.strip().replace("..", "_")
+    sanitized = re.sub(r"[\\/]+", "_", sanitized)
+    sanitized = re.sub(r"[^0-9A-Za-z._-]", "_", sanitized)
+    sanitized = sanitized.strip("._-")
+    return sanitized or "query"
+
+
+def build_default_report_path(keyword: str) -> Path:
+    safe_keyword = sanitize_keyword_for_filename(keyword)
+    filename = Path(f"query_item_{safe_keyword}.md").name
+    return OUTPUTS_DIR / "reports" / filename
 
 
 @click.command()
@@ -62,7 +77,7 @@ def main(keyword: str, db_path: str, output: str) -> None:
     else:
         lines.append("- 暂无候选关联。")
 
-    report = Path(output) if output else OUTPUTS_DIR / "reports" / f"query_item_{keyword}.md"
+    report = Path(output) if output else build_default_report_path(keyword)
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
