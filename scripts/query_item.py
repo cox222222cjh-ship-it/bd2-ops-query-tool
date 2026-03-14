@@ -152,6 +152,7 @@ def collect_key_business_paths(
     drop_evidence: list[str] = []
     production_evidence: list[str] = []
     skill_evidence: list[str] = []
+    skill_pending_lines: list[str] = []
 
     for tid in item_tids:
         sale_hits = query_exact_rows(conn, "SaleTable", "ItemTID", tid)
@@ -196,8 +197,8 @@ def collect_key_business_paths(
                 f"ItemTable.TID={tid}.UseSkillTID={use_skill_tid} -> SkillTable.TID（命中 {len(skill_hits)} 条）"
             )
         else:
-            skill_evidence.append(
-                f"ItemTable.TID={tid}.UseSkillTID={use_skill_tid} -> SkillTable.TID（未命中，待确认数据一致性）"
+            skill_pending_lines.append(
+                f"ItemTable.TID={tid}.UseSkillTID={use_skill_tid} 未命中 SkillTable.TID（待确认：技能主表缺失或ID语义不一致）"
             )
 
     add_direct_card("商店链路", shop_evidence)
@@ -205,6 +206,15 @@ def collect_key_business_paths(
     add_direct_card("掉落链路", drop_evidence)
     add_direct_card("制作产出链路", production_evidence)
     add_direct_card("使用技能触发链路", skill_evidence)
+    if skill_pending_lines:
+        path_cards.append(
+            {
+                "path": "使用技能触发链路缺口",
+                "evidence_level": "候选推断",
+                "status": "待确认",
+                "lines": skill_pending_lines,
+            }
+        )
 
     candidate_focus = [
         (("ItemTable", "TID"), ("SaleTable", "ItemTID"), "商店链路（SaleTable）"),
