@@ -38,32 +38,32 @@ def build_table_domain_map(domain_candidates: list[dict[str, Any]]) -> dict[str,
     return mapping
 
 
-def relation_categories(rel: dict[str, Any], table_domains: dict[str, set[str]]) -> set[str]:
+def relation_categories(rel: dict[str, Any], table_domains: dict[str, set[str]]) -> list[str]:
     source_table = str(rel.get("source_table", "")).strip()
     target_table = str(rel.get("target_table", "")).strip()
     domains = set()
     domains.update(table_domains.get(source_table, set()))
     domains.update(table_domains.get(target_table, set()))
 
-    categories: set[str] = set()
-    for category, aliases in CATEGORY_DOMAIN_ALIASES.items():
-        if any(domain in aliases for domain in domains):
-            categories.add(category)
+    inferred_text = " ".join(
+        [
+            str(rel.get("source_table", "")),
+            str(rel.get("source_field", "")),
+            str(rel.get("target_table", "")),
+            str(rel.get("target_field", "")),
+            str(rel.get("inference", "")),
+        ]
+    ).lower()
 
-    if not categories:
-        inferred_text = " ".join(
-            [
-                str(rel.get("source_table", "")),
-                str(rel.get("source_field", "")),
-                str(rel.get("target_table", "")),
-                str(rel.get("target_field", "")),
-                str(rel.get("inference", "")),
-            ]
-        ).lower()
-        for category, aliases in CATEGORY_DOMAIN_ALIASES.items():
-            if any(alias in inferred_text for alias in aliases):
-                categories.add(category)
-    return categories
+    # 并集策略：域线索 + 文本线索；按固定类别顺序稳定去重。
+    merged_categories: list[str] = []
+    for category, aliases in CATEGORY_DOMAIN_ALIASES.items():
+        domain_hit = any(domain in aliases for domain in domains)
+        text_hit = any(alias in inferred_text for alias in aliases)
+        if domain_hit or text_hit:
+            merged_categories.append(category)
+
+    return merged_categories
 
 
 def sanitize_keyword_for_filename(keyword: str) -> str:
