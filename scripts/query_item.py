@@ -12,7 +12,7 @@ from common import OUTPUTS_DIR, read_json
 
 
 def sanitize_keyword_for_filename(keyword: str) -> str:
-    digest = hashlib.sha1(keyword.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(keyword.encode("utf-8")).hexdigest()
 
     sanitized = keyword.strip().replace("..", "_")
     sanitized = re.sub(r"[\\/]+", "_", sanitized)
