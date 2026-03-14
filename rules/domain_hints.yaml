@@ -24,3 +24,7 @@ drop:
 shop:
   table_keywords: [shop, cashshop, sale, store, mall]
   field_keywords: [shopid, saleid, storeid]
+
+activity:
+  table_keywords: [event]
+  field_keywords: [eventname]
