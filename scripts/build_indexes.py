@@ -20,6 +20,7 @@ STRONG_ITEM_RELATION_FIELD_WHITELIST = {
 }
 STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN = re.compile(r"^(dropitem|boxitem)(\d+|id|tid)$")
 STRONG_INTERSECTION_SENTINEL_VALUES = {"", "0", "0.0", "-1", "none", "null"}
+STRONG_INTERSECTION_SCHEMA_TYPE_TOKENS = {"u8", "u16", "u32", "u64", "s8", "s16", "s32", "s64", "f32", "f64", "cbwstring", "string"}
 
 
 def normalize_name(value: str) -> str:
@@ -42,6 +43,18 @@ def is_strong_item_relation_field(field_name: str) -> bool:
     if normalized in STRONG_ITEM_RELATION_FIELD_WHITELIST:
         return True
     return bool(STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN.match(normalized))
+
+
+def is_meaningful_strong_overlap_value(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in STRONG_INTERSECTION_SENTINEL_VALUES:
+        return False
+    token_base = normalized.split(":", 1)[0]
+    if token_base in STRONG_INTERSECTION_SCHEMA_TYPE_TOKENS and (
+        normalized == token_base or normalized.startswith(f"{token_base}:")
+    ):
+        return False
+    return True
 
 
 @click.command()
@@ -162,7 +175,7 @@ def main(db_path: str, output_dir: str) -> None:
             if left["table"] == right["table"]:
                 continue
             inter = left["values"].intersection(right["values"])
-            meaningful_inter = {v for v in inter if v.strip().lower() not in STRONG_INTERSECTION_SENTINEL_VALUES}
+            meaningful_inter = {v for v in inter if is_meaningful_strong_overlap_value(v)}
             if meaningful_inter:
                 candidates.append(
                     {
