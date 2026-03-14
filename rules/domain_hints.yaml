@@ -16,3 +16,7 @@ gift:
 enhance:
   table_keywords: [strengthen, reinforce, enhance, upgrade]
   field_keywords: [level, cost_item, material_tid, result_tid]
+
+shop:
+  table_keywords: [shop, cashshop, sale, store, mall]
+  field_keywords: [shopid, saleid, storeid]
