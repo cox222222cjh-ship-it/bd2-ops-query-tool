@@ -351,3 +351,17 @@ python scripts/generate_reports.py
 python scripts/query_item.py ItemTable
 python scripts/validate_outputs.py
 ```
+
+## 16. 当前阶段说明（Phase 1）
+
+- 项目当前仍处于 **Phase 1（数据底座）**，尚未进入 Phase 2。
+- 当前范围：扫描 `data/current`、导入 SQLite、构建索引、生成候选关系与候选业务域报告，并提供最小查询闭环。
+- 当前阶段不建设正式前端。
+- 所有推断出的业务关系与业务域分类必须保持“候选 / 待确认”状态。
+
+## 17. Minimal Validation Checklist
+
+- 修改 `query_item.py` 后：验证默认报告文件名不会发生碰撞。
+- 修改 `import_to_sqlite.py` 后：验证空导入计划会 fail-fast，且不会删除已有 SQLite 业务表。
+- 修改 `scan_tables.py` 后：验证不同子目录下同名文件不会互相覆盖 schema 输出。
+
