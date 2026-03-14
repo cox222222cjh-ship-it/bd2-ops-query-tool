@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -10,6 +11,16 @@ import click
 from common import OUTPUTS_DIR, ensure_dirs, setup_logging, write_json
 
 logger = setup_logging("build_indexes")
+
+STRONG_ITEM_RELATION_FIELD_WHITELIST = {
+    "itemtid",
+    "itemid",
+    "completeitemtid",
+    "useskilltid",
+}
+STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN = re.compile(r"^(dropitem|boxitem)(\d+|id|tid)$")
+STRONG_INTERSECTION_SENTINEL_VALUES = {"", "0", "0.0", "-1", "none", "null"}
+STRONG_INTERSECTION_SCHEMA_TYPE_TOKENS = {"u8", "u16", "u32", "u64", "s8", "s16", "s32", "s64", "f32", "f64", "cbwstring", "string"}
 
 
 def normalize_name(value: str) -> str:
@@ -27,6 +38,25 @@ def is_id_like(field_name: str) -> bool:
     return field_name.lower().endswith(("id", "tid")) or "_id" in field_name.lower() or "_tid" in field_name.lower()
 
 
+def is_strong_item_relation_field(field_name: str) -> bool:
+    normalized = normalize_name(field_name)
+    if normalized in STRONG_ITEM_RELATION_FIELD_WHITELIST:
+        return True
+    return bool(STRONG_ITEM_RELATION_PREFIX_IDLIKE_PATTERN.match(normalized))
+
+
+def is_meaningful_strong_overlap_value(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in STRONG_INTERSECTION_SENTINEL_VALUES:
+        return False
+    token_base = normalized.split(":", 1)[0]
+    if token_base in STRONG_INTERSECTION_SCHEMA_TYPE_TOKENS and (
+        normalized == token_base or normalized.startswith(f"{token_base}:")
+    ):
+        return False
+    return True
+
+
 @click.command()
 @click.option("--db-path", default="outputs/sqlite/game_tables.db", show_default=True)
 @click.option("--output-dir", default="outputs/intermediate", show_default=True)
@@ -40,6 +70,7 @@ def main(db_path: str, output_dir: str) -> None:
     field_index: list[dict[str, Any]] = []
     value_sample_index: list[dict[str, Any]] = []
     id_columns: list[dict[str, Any]] = []
+    strong_relation_columns: list[dict[str, Any]] = []
 
     for table in fetch_table_names(conn):
         row_count = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
@@ -71,6 +102,16 @@ def main(db_path: str, output_dir: str) -> None:
             value_sample_index.append({"table": table, "field": name, "samples": [str(v) for v in samples]})
             if is_id_like(name) and unique_count > 0:
                 id_columns.append({"table": table, "field": name, "values": set(str(v) for v in samples)})
+            if is_strong_item_relation_field(name):
+                strong_values = {
+                    str(r[0])
+                    for r in conn.execute(
+                        f'SELECT DISTINCT "{name}" FROM "{table}" '
+                        f'WHERE "{name}" IS NOT NULL AND TRIM(CAST("{name}" AS TEXT)) != ""'
+                    ).fetchall()
+                }
+                if strong_values:
+                    strong_relation_columns.append({"table": table, "field": name, "values": strong_values})
 
     candidates: list[dict[str, Any]] = []
     by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -97,6 +138,7 @@ def main(db_path: str, output_dir: str) -> None:
                         "target_table": right["table"],
                         "target_field": right["field"],
                         "inference": "same_field_name",
+                        "evidence_strength": "weak",
                         "confidence": round(min(confidence, 0.95), 2),
                         "status": "待确认",
                     }
@@ -118,8 +160,34 @@ def main(db_path: str, output_dir: str) -> None:
                         "target_table": right["table"],
                         "target_field": right["field"],
                         "inference": "sample_value_intersection",
+                        "evidence_strength": "weak",
                         "intersection_samples": sorted(inter)[:5],
                         "confidence": 0.55,
+                        "status": "待确认",
+                    }
+                )
+
+    # 强证据层（字段白名单 + 全量值精确匹配）
+    for i in range(len(strong_relation_columns)):
+        for j in range(i + 1, len(strong_relation_columns)):
+            left = strong_relation_columns[i]
+            right = strong_relation_columns[j]
+            if left["table"] == right["table"]:
+                continue
+            inter = left["values"].intersection(right["values"])
+            meaningful_inter = {v for v in inter if is_meaningful_strong_overlap_value(v)}
+            if meaningful_inter:
+                candidates.append(
+                    {
+                        "source_table": left["table"],
+                        "source_field": left["field"],
+                        "target_table": right["table"],
+                        "target_field": right["field"],
+                        "inference": "exact_value_match",
+                        "evidence_strength": "strong",
+                        "intersection_samples": sorted(meaningful_inter)[:5],
+                        "match_count": len(meaningful_inter),
+                        "confidence": 0.9,
                         "status": "待确认",
                     }
                 )
@@ -130,10 +198,10 @@ def main(db_path: str, output_dir: str) -> None:
     write_json(out_dir / "candidate_relationships.json", candidates)
 
     rel_md = OUTPUTS_DIR / "reports" / "candidate_relationships.md"
-    lines = ["# 候选关系", "", "| 来源 | 目标 | 推断方式 | 置信度 | 状态 |", "|---|---|---|---:|---|"]
+    lines = ["# 候选关系", "", "| 来源 | 目标 | 推断方式 | 证据层级 | 置信度 | 状态 |", "|---|---|---|---|---:|---|"]
     for rel in candidates[:500]:
         lines.append(
-            f"| {rel['source_table']}.{rel['source_field']} | {rel['target_table']}.{rel['target_field']} | {rel['inference']} | {rel['confidence']} | {rel['status']} |"
+            f"| {rel['source_table']}.{rel['source_field']} | {rel['target_table']}.{rel['target_field']} | {rel['inference']} | {rel.get('evidence_strength', 'weak')} | {rel['confidence']} | {rel['status']} |"
         )
     rel_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
