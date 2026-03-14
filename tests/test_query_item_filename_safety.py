@@ -13,6 +13,17 @@ class QueryItemFilenameSafetyTest(unittest.TestCase):
         reports_dir = Path("outputs/reports").resolve()
         self.assertEqual(report_path.resolve().parent, reports_dir)
 
+    def test_mixed_keywords_do_not_collide(self) -> None:
+        keywords = [
+            "A",
+            "任务A",
+            "A任务",
+            "生命25%恢复药水",
+            "破旧的最强的双手剑(制作)",
+        ]
+        names = [build_default_report_path(k).name for k in keywords]
+        self.assertEqual(len(set(names)), len(names))
+
     def test_unicode_keywords_do_not_collapse_to_same_filename(self) -> None:
         path1 = build_default_report_path("测试物品")
         path2 = build_default_report_path("任务")

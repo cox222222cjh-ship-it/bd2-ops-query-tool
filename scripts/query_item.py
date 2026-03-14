@@ -12,14 +12,19 @@ from common import OUTPUTS_DIR, read_json
 
 
 def sanitize_keyword_for_filename(keyword: str) -> str:
+    digest = hashlib.sha1(keyword.encode("utf-8")).hexdigest()[:8]
+
     sanitized = keyword.strip().replace("..", "_")
     sanitized = re.sub(r"[\\/]+", "_", sanitized)
     sanitized = re.sub(r"[^0-9A-Za-z._-]", "_", sanitized)
     sanitized = sanitized.strip("._-")
-    if sanitized:
+
+    is_safe_ascii_unchanged = bool(re.fullmatch(r"[0-9A-Za-z._-]+", keyword)) and keyword == sanitized
+    if is_safe_ascii_unchanged:
         return sanitized
-    digest = hashlib.sha1(keyword.encode("utf-8")).hexdigest()[:8]
-    return f"query_{digest}"
+    if not sanitized:
+        return f"query_{digest}"
+    return f"{sanitized}_{digest}"
 
 
 def build_default_report_path(keyword: str) -> Path:
