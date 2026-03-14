@@ -19,6 +19,8 @@ CATEGORY_DOMAIN_ALIASES: dict[str, set[str]] = {
     "drops": {"drop", "loot"},
     "activities": {"activity", "event"},
 }
+UNCATEGORIZED_KEY = "uncategorized"
+UNCATEGORIZED_LABEL = "未分类候选（待确认）"
 
 
 def normalize_domain(value: str) -> str:
@@ -125,10 +127,14 @@ def main(keyword: str, db_path: str, output: str) -> None:
     ]
 
     category_items: dict[str, list[dict[str, Any]]] = {k: [] for k in CATEGORY_DOMAIN_ALIASES}
+    category_items[UNCATEGORIZED_KEY] = []
     for rel in related:
         categories = relation_categories(rel, table_domains)
-        for category in categories:
-            category_items[category].append(rel)
+        if categories:
+            for category in categories:
+                category_items[category].append(rel)
+        else:
+            category_items[UNCATEGORIZED_KEY].append(rel)
 
     lines = [f"# 查询结果：{keyword}", "", "## 直接引用（已命中）", ""]
     if matched_rows:
@@ -150,6 +156,18 @@ def main(keyword: str, db_path: str, output: str) -> None:
         else:
             lines.append("- 暂无候选（待确认）")
         lines.append("")
+
+    lines.append(f"### {UNCATEGORIZED_LABEL}")
+    uncategorized_bucket = category_items.get(UNCATEGORIZED_KEY, [])
+    if uncategorized_bucket:
+        for rel in uncategorized_bucket[:50]:
+            lines.append(
+                f"- `{rel['source_table']}.{rel['source_field']}` -> `{rel['target_table']}.{rel['target_field']}` "
+                f"({rel['inference']}, confidence={rel['confidence']}, 状态=待确认)"
+            )
+    else:
+        lines.append("- 暂无候选（待确认）")
+    lines.append("")
 
     report = Path(output) if output else build_default_report_path(keyword)
     report.parent.mkdir(parents=True, exist_ok=True)
