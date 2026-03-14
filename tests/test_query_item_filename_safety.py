@@ -24,6 +24,11 @@ class QueryItemFilenameSafetyTest(unittest.TestCase):
         names = [build_default_report_path(k).name for k in keywords]
         self.assertEqual(len(set(names)), len(names))
 
+    def test_lossy_namespace_does_not_collide_with_safe_ascii(self) -> None:
+        lossy = build_default_report_path("任务A").name
+        safe = build_default_report_path("A_ad728752").name
+        self.assertNotEqual(lossy, safe)
+
     def test_unicode_keywords_do_not_collapse_to_same_filename(self) -> None:
         path1 = build_default_report_path("测试物品")
         path2 = build_default_report_path("任务")

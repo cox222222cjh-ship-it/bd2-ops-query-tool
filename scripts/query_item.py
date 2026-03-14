@@ -23,8 +23,8 @@ def sanitize_keyword_for_filename(keyword: str) -> str:
     if is_safe_ascii_unchanged:
         return sanitized
     if not sanitized:
-        return f"query_{digest}"
-    return f"{sanitized}_{digest}"
+        return f"lossy_query_{digest}"
+    return f"lossy_{sanitized}_{digest}"
 
 
 def build_default_report_path(keyword: str) -> Path:
