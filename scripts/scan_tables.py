@@ -129,7 +129,8 @@ def main(input_dir: str, manifest: str, schema: str, failures: str) -> None:
                 "scanned_at": now_iso(),
             }
             manifest_records.append(record)
-            schema_payload[file_path.stem] = {
+            schema_key = rel_path
+            schema_payload[schema_key] = {
                 "file": rel_path,
                 "fields": profiles,
                 "row_count": int(len(df)),

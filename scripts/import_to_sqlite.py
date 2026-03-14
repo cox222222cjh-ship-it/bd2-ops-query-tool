@@ -28,6 +28,20 @@ def load_table(file_path: Path, encoding: str, delimiter: str) -> pd.DataFrame:
     )
 
 
+def planned_imports(manifest_payload: list[dict[str, str]]) -> list[tuple[dict[str, str], str]]:
+    table_name_seen: dict[str, int] = {}
+    planned: list[tuple[dict[str, str], str]] = []
+    for item in manifest_payload:
+        if item.get("status") != "scanned":
+            continue
+        sqlite_name = normalize_table_name(item["table_name"])
+        table_name_seen[sqlite_name] = table_name_seen.get(sqlite_name, 0) + 1
+        if table_name_seen[sqlite_name] > 1:
+            sqlite_name = f"{sqlite_name}_{table_name_seen[sqlite_name]}"
+        planned.append((item, sqlite_name))
+    return planned
+
+
 @click.command()
 @click.option("--manifest", default="data/cache/tables_manifest.json", show_default=True)
 @click.option("--db-path", default="outputs/sqlite/game_tables.db", show_default=True)
@@ -53,15 +67,29 @@ def main(manifest: str, db_path: str) -> None:
     )
     conn.execute("DELETE FROM table_metadata")
 
-    table_name_seen: dict[str, int] = {}
-    for item in manifest_payload:
-        if item.get("status") != "scanned":
-            continue
+    planned = planned_imports(manifest_payload)
+    if not planned:
+        conn.close()
+        raise click.ClickException("no scanned tables found in manifest; aborting stale-table cleanup/import")
+
+    existing_tables = {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        if not row[0].startswith("sqlite_") and row[0] != "table_metadata"
+    }
+    planned_tables = {sqlite_name for _, sqlite_name in planned}
+    stale_tables = sorted(existing_tables - planned_tables)
+    for table_name in stale_tables:
+        escaped = table_name.replace('"', '""')
+        conn.execute(f'DROP TABLE IF EXISTS "{escaped}"')
+
+    if stale_tables:
+        logger.info("removed stale tables: %s", ", ".join(stale_tables))
+    else:
+        logger.info("no stale tables found")
+
+    for item, sqlite_name in planned:
         source_name = item["table_name"]
-        sqlite_name = normalize_table_name(source_name)
-        table_name_seen[sqlite_name] = table_name_seen.get(sqlite_name, 0) + 1
-        if table_name_seen[sqlite_name] > 1:
-            sqlite_name = f"{sqlite_name}_{table_name_seen[sqlite_name]}"
 
         source_file = PROJECT_ROOT / item["relative_path"]
         status = "imported"
