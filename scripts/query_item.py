@@ -88,6 +88,173 @@ def build_default_report_path(keyword: str) -> Path:
     return OUTPUTS_DIR / "reports" / filename
 
 
+def table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def table_columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    if not table_exists(conn, table):
+        return []
+    return [c[1] for c in conn.execute(f'PRAGMA table_info("{table}")').fetchall()]
+
+
+def query_exact_rows(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    value: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    columns = table_columns(conn, table)
+    if not columns or column not in columns:
+        return []
+    rows = conn.execute(
+        f'SELECT * FROM "{table}" WHERE CAST("{column}" AS TEXT) = ? LIMIT {limit}',
+        (value,),
+    ).fetchall()
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def collect_key_business_paths(
+    conn: sqlite3.Connection,
+    matched_rows: list[dict[str, Any]],
+    relationships: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    item_rows = [row for row in matched_rows if row.get("table") == "ItemTable"]
+    item_tids: list[str] = []
+    for row in item_rows:
+        tid = str(row.get("record", {}).get("TID", "")).strip()
+        if tid and tid not in item_tids:
+            item_tids.append(tid)
+
+    path_cards: list[dict[str, Any]] = []
+    if not item_tids:
+        return path_cards
+
+    def add_direct_card(path_name: str, evidence_lines: list[str]) -> None:
+        if not evidence_lines:
+            return
+        path_cards.append(
+            {
+                "path": path_name,
+                "evidence_level": "直接证据",
+                "status": "可复核",
+                "lines": evidence_lines,
+            }
+        )
+
+    shop_evidence: list[str] = []
+    box_evidence: list[str] = []
+    drop_evidence: list[str] = []
+    production_evidence: list[str] = []
+    skill_evidence: list[str] = []
+
+    for tid in item_tids:
+        sale_hits = query_exact_rows(conn, "SaleTable", "ItemTID", tid)
+        if sale_hits:
+            shop_evidence.append(f"ItemTable.TID={tid} -> SaleTable.ItemTID（命中 {len(sale_hits)} 条）")
+
+        cash_hits = query_exact_rows(conn, "CashShopInfo", "ItemId", tid)
+        if cash_hits:
+            shop_evidence.append(f"ItemTable.TID={tid} -> CashShopInfo.ItemId（命中 {len(cash_hits)} 条）")
+
+        box_fields = [c for c in table_columns(conn, "ItemBoxTable") if c.lower().startswith("boxitem")]
+        for field in box_fields:
+            hits = query_exact_rows(conn, "ItemBoxTable", field, tid)
+            if hits:
+                box_evidence.append(f"ItemTable.TID={tid} -> ItemBoxTable.{field}（命中 {len(hits)} 条）")
+
+        drop_fields = [c for c in table_columns(conn, "ItemDropTable") if c.lower().startswith("dropitem")]
+        for field in drop_fields:
+            hits = query_exact_rows(conn, "ItemDropTable", field, tid)
+            if hits:
+                drop_evidence.append(f"ItemTable.TID={tid} -> ItemDropTable.{field}（命中 {len(hits)} 条）")
+
+        product_hits = query_exact_rows(conn, "ProductItemTable", "CompleteItemTID", tid)
+        if product_hits:
+            production_evidence.append(
+                f"ItemTable.TID={tid} <- ProductItemTable.CompleteItemTID（命中 {len(product_hits)} 条，疑似产出链路）"
+            )
+
+    seen_skill_pairs: set[tuple[str, str]] = set()
+    for row in item_rows:
+        tid = str(row.get("record", {}).get("TID", "")).strip()
+        use_skill_tid = str(row.get("record", {}).get("UseSkillTID", "")).strip()
+        if not tid or not use_skill_tid or use_skill_tid in {"0", "", "None", "null"}:
+            continue
+        pair = (tid, use_skill_tid)
+        if pair in seen_skill_pairs:
+            continue
+        seen_skill_pairs.add(pair)
+        skill_hits = query_exact_rows(conn, "SkillTable", "TID", use_skill_tid)
+        if skill_hits:
+            skill_evidence.append(
+                f"ItemTable.TID={tid}.UseSkillTID={use_skill_tid} -> SkillTable.TID（命中 {len(skill_hits)} 条）"
+            )
+        else:
+            skill_evidence.append(
+                f"ItemTable.TID={tid}.UseSkillTID={use_skill_tid} -> SkillTable.TID（未命中，待确认数据一致性）"
+            )
+
+    add_direct_card("商店链路", shop_evidence)
+    add_direct_card("箱子投放链路", box_evidence)
+    add_direct_card("掉落链路", drop_evidence)
+    add_direct_card("制作产出链路", production_evidence)
+    add_direct_card("使用技能触发链路", skill_evidence)
+
+    candidate_focus = [
+        (("ItemTable", "TID"), ("SaleTable", "ItemTID"), "商店链路（SaleTable）"),
+        (("ItemTable", "TID"), ("CashShopInfo", "ItemId"), "商店链路（CashShopInfo）"),
+        (("ItemTable", "TID"), ("ItemBoxTable", "BoxItem"), "箱子投放链路"),
+        (("ItemTable", "TID"), ("ItemDropTable", "DropItem"), "掉落链路"),
+        (("ProductItemTable", "CompleteItemTID"), ("ItemTable", "TID"), "制作产出链路"),
+        (("ItemTable", "UseSkillTID"), ("SkillTable", "TID"), "使用技能触发链路"),
+    ]
+
+    candidate_lines: list[str] = []
+    for rel in relationships:
+        source_table = str(rel.get("source_table", ""))
+        target_table = str(rel.get("target_table", ""))
+        source_field = str(rel.get("source_field", ""))
+        target_field = str(rel.get("target_field", ""))
+        for left, right, label in candidate_focus:
+            forward = (
+                source_table == left[0]
+                and source_field.lower().startswith(left[1].lower())
+                and target_table == right[0]
+                and target_field.lower().startswith(right[1].lower())
+            )
+            backward = (
+                source_table == right[0]
+                and source_field.lower().startswith(right[1].lower())
+                and target_table == left[0]
+                and target_field.lower().startswith(left[1].lower())
+            )
+            if forward or backward:
+                candidate_lines.append(
+                    f"{label}：{source_table}.{source_field} -> {target_table}.{target_field} "
+                    f"（{rel.get('inference', '候选推断')}，状态={rel.get('status', '待确认')}）"
+                )
+                break
+
+    if candidate_lines:
+        deduped = list(dict.fromkeys(candidate_lines))[:20]
+        path_cards.append(
+            {
+                "path": "关键候选链路补充",
+                "evidence_level": "候选推断",
+                "status": "待确认",
+                "lines": deduped,
+            }
+        )
+
+    return path_cards
+
+
 @click.command()
 @click.argument("keyword")
 @click.option("--db-path", default="outputs/sqlite/game_tables.db", show_default=True)
@@ -170,6 +337,20 @@ def main(keyword: str, db_path: str, output: str) -> None:
     else:
         lines.append("- 暂无候选（待确认）")
     lines.append("")
+
+    key_cards = collect_key_business_paths(conn, matched_rows, relationships)
+    lines.extend(["", "## 关键链路（高优先）", ""])
+    if key_cards:
+        for card in key_cards:
+            lines.append(f"### {card['path']}")
+            lines.append(f"- 证据层级：{card['evidence_level']}")
+            lines.append(f"- 状态：{card['status']}")
+            for detail in card["lines"]:
+                lines.append(f"  - {detail}")
+            lines.append("")
+    else:
+        lines.append("- 暂无可展开的关键链路。")
+        lines.append("")
 
     report = Path(output) if output else build_default_report_path(keyword)
     report.parent.mkdir(parents=True, exist_ok=True)
