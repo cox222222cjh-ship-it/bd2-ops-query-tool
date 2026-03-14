@@ -68,6 +68,9 @@ def main(manifest: str, db_path: str) -> None:
     conn.execute("DELETE FROM table_metadata")
 
     planned = planned_imports(manifest_payload)
+    if not planned:
+        conn.close()
+        raise click.ClickException("no scanned tables found in manifest; aborting stale-table cleanup/import")
 
     existing_tables = {
         row[0]

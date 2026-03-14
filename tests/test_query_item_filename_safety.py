@@ -13,6 +13,11 @@ class QueryItemFilenameSafetyTest(unittest.TestCase):
         reports_dir = Path("outputs/reports").resolve()
         self.assertEqual(report_path.resolve().parent, reports_dir)
 
+    def test_unicode_keywords_do_not_collapse_to_same_filename(self) -> None:
+        path1 = build_default_report_path("测试物品")
+        path2 = build_default_report_path("任务")
+        self.assertNotEqual(path1.name, path2.name)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sqlite3
+import hashlib
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,10 @@ def sanitize_keyword_for_filename(keyword: str) -> str:
     sanitized = re.sub(r"[\\/]+", "_", sanitized)
     sanitized = re.sub(r"[^0-9A-Za-z._-]", "_", sanitized)
     sanitized = sanitized.strip("._-")
-    return sanitized or "query"
+    if sanitized:
+        return sanitized
+    digest = hashlib.sha1(keyword.encode("utf-8")).hexdigest()[:8]
+    return f"query_{digest}"
 
 
 def build_default_report_path(keyword: str) -> Path:
